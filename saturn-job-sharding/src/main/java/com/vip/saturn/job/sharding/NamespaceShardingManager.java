@@ -1,17 +1,32 @@
+/**
+ * Copyright 2016 vip.com.
+ * <p>
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+ *  the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+ * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+ * specific language governing permissions and limitations under the License.
+ * </p>
+ **/
+
 package com.vip.saturn.job.sharding;
 
-import java.util.concurrent.atomic.AtomicBoolean;
-
-import com.vip.saturn.job.integrate.service.ReportAlarmService;
 import org.apache.curator.framework.CuratorFramework;
+import org.apache.zookeeper.KeeperException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.vip.saturn.job.integrate.service.ReportAlarmService;
+import com.vip.saturn.job.integrate.service.UpdateJobConfigService;
+import com.vip.saturn.job.sharding.listener.AbstractConnectionListener;
 import com.vip.saturn.job.sharding.listener.AddOrRemoveJobListener;
 import com.vip.saturn.job.sharding.listener.ExecutorOnlineOfflineTriggerShardingListener;
-import com.vip.saturn.job.sharding.listener.SaturnExecutorsShardingTriggerShardingListener;
+import com.vip.saturn.job.sharding.listener.ExecutorTrafficTriggerShardingListener;
 import com.vip.saturn.job.sharding.listener.LeadershipElectionListener;
-import com.vip.saturn.job.sharding.listener.ShardingConnectionLostListener;
+import com.vip.saturn.job.sharding.listener.SaturnExecutorsShardingTriggerShardingListener;
 import com.vip.saturn.job.sharding.node.SaturnExecutorsNode;
 import com.vip.saturn.job.sharding.service.AddJobListenersService;
 import com.vip.saturn.job.sharding.service.ExecutorCleanService;
@@ -24,43 +39,46 @@ import com.vip.saturn.job.sharding.service.ShardingTreeCacheService;
  *
  */
 public class NamespaceShardingManager {
-	static Logger log = LoggerFactory.getLogger(NamespaceShardingManager.class);
+
+	private static final Logger log = LoggerFactory.getLogger(NamespaceShardingManager.class);
 
 	private NamespaceShardingService namespaceShardingService;
-	private ExecutorCleanService executorCleanService;
-	private CuratorFramework curatorFramework;
-	private AddJobListenersService addJobListenersService;
 
-	private String namespace;
+	private ExecutorCleanService executorCleanService;
+
+	private CuratorFramework curatorFramework;
+
+	private AddJobListenersService addJobListenersService;
 
 	private ShardingTreeCacheService shardingTreeCacheService;
 
-	private AtomicBoolean isStopped = new AtomicBoolean(true);
+	private NamespaceShardingConnectionListener namespaceShardingConnectionListener;
 
-	private ShardingConnectionLostListener shardingConnectionLostListener;
-	
-	public NamespaceShardingManager(CuratorFramework curatorFramework, String namespace, String hostValue, ReportAlarmService reportAlarmService) {
+	private String namespace;
+
+	private String zkClusterKey;
+
+	public NamespaceShardingManager(CuratorFramework curatorFramework, String namespace, String hostValue,
+			ReportAlarmService reportAlarmService, UpdateJobConfigService updateJobConfigService) {
 		this.curatorFramework = curatorFramework;
 		this.namespace = namespace;
 		this.shardingTreeCacheService = new ShardingTreeCacheService(namespace, curatorFramework);
-		this.namespaceShardingService = new NamespaceShardingService(curatorFramework, hostValue, reportAlarmService);
-		this.executorCleanService = new ExecutorCleanService(curatorFramework);
-		this.addJobListenersService = new AddJobListenersService(namespace, curatorFramework, namespaceShardingService, shardingTreeCacheService);
+		this.namespaceShardingService = new NamespaceShardingService(curatorFramework, hostValue,
+				reportAlarmService);
+		this.executorCleanService = new ExecutorCleanService(curatorFramework,updateJobConfigService);
+		this.addJobListenersService = new AddJobListenersService(namespace, curatorFramework, namespaceShardingService,
+				shardingTreeCacheService);
 	}
 
-	public boolean isStopped() {
-		return isStopped.get();
+	public String getZkClusterKey() {
+		return zkClusterKey;
 	}
 
-	public String getNamespace() {
-		return namespace;
+	public void setZkClusterKey(String zkClusterKey) {
+		this.zkClusterKey = zkClusterKey;
 	}
 
-    public CuratorFramework getCuratorFramework() {
-        return curatorFramework;
-    }
-
-    private void start0() throws Exception {
+	private void start0() throws Exception {
 		shardingTreeCacheService.start();
 		// create ephemeral node $SaturnExecutors/leader/host & $Jobs.
 		namespaceShardingService.leaderElection();
@@ -71,93 +89,77 @@ public class NamespaceShardingManager {
 		addNewOrRemoveJobListener();
 	}
 
-	private void stop0() {
-		shardingTreeCacheService.shutdown();
-		namespaceShardingService.shutdown();
+	private void addConnectionLostListener() {
+		namespaceShardingConnectionListener = new NamespaceShardingConnectionListener(
+				"connectionListener-for-NamespaceSharding-" + namespace);
+		curatorFramework.getConnectionStateListenable().addListener(namespaceShardingConnectionListener);
 	}
 
 	/**
 	 * leadership election, add listeners
 	 */
 	public void start() throws Exception {
-		synchronized (isStopped) {
-			if (isStopped.compareAndSet(true, false)) {
-				start0();
-				addConnectionLostListener();
-			}
-		}
-	}
-
-	private void addConnectionLostListener() {
-		shardingConnectionLostListener = new ShardingConnectionLostListener(this) {
-			@Override
-			public void stop() {
-				stop0();
-			}
-
-			@Override
-			public void restart() {
-				try {
-					start0();
-				} catch (Exception e) {
-					log.error("restart " + namespace + "-NamespaceShardingManager error", e);
-				}
-			}
-		};
-		curatorFramework.getConnectionStateListenable().addListener(shardingConnectionLostListener);
+		start0();
+		addConnectionLostListener();
 	}
 
 	/**
-	 *  watch 1-level-depth of the children of /$Jobs
+	 * watch 1-level-depth of the children of /$Jobs
 	 */
 	private void addNewOrRemoveJobListener() throws Exception {
-		String path = SaturnExecutorsNode.$JOBSNODE_PATH;
+		String path = SaturnExecutorsNode.JOBSNODE_PATH;
 		int depth = 1;
 		createNodePathIfNotExists(path);
 		shardingTreeCacheService.addTreeCacheIfAbsent(path, depth);
-		shardingTreeCacheService.addTreeCacheListenerIfAbsent(path, depth, new AddOrRemoveJobListener(addJobListenersService));
+		shardingTreeCacheService.addTreeCacheListenerIfAbsent(path, depth,
+				new AddOrRemoveJobListener(addJobListenersService));
 	}
 
-
 	/**
-	 *  watch 2-level-depth of the children of /$SaturnExecutors/executors
+	 * watch 2-level-depth of the children of /$SaturnExecutors/executors
 	 */
 	private void addOnlineOfflineListener() throws Exception {
 		String path = SaturnExecutorsNode.EXECUTORSNODE_PATH;
 		int depth = 2;
 		createNodePathIfNotExists(path);
 		shardingTreeCacheService.addTreeCacheIfAbsent(path, depth);
-		shardingTreeCacheService.addTreeCacheListenerIfAbsent(path, depth, new ExecutorOnlineOfflineTriggerShardingListener(namespaceShardingService, executorCleanService));
+		shardingTreeCacheService.addTreeCacheListenerIfAbsent(path, depth,
+				new ExecutorOnlineOfflineTriggerShardingListener(namespaceShardingService, executorCleanService));
+		shardingTreeCacheService.addTreeCacheListenerIfAbsent(path, depth,
+				new ExecutorTrafficTriggerShardingListener(namespaceShardingService));
 	}
-	
+
 	/**
-	 *  watch 1-level-depth of the children of /$SaturnExecutors/sharding
+	 * watch 1-level-depth of the children of /$SaturnExecutors/sharding
 	 */
 	private void addExecutorShardingListener() throws Exception {
 		String path = SaturnExecutorsNode.SHARDINGNODE_PATH;
 		int depth = 1;
 		createNodePathIfNotExists(path);
 		shardingTreeCacheService.addTreeCacheIfAbsent(path, depth);
-		shardingTreeCacheService.addTreeCacheListenerIfAbsent(path, depth, new SaturnExecutorsShardingTriggerShardingListener(namespaceShardingService));
+		shardingTreeCacheService.addTreeCacheListenerIfAbsent(path, depth,
+				new SaturnExecutorsShardingTriggerShardingListener(namespaceShardingService));
 	}
 
 	/**
-	 * watch 1-level-depth of the children of /$SaturnExecutors/leader  
+	 * watch 1-level-depth of the children of /$SaturnExecutors/leader
 	 */
 	private void addLeaderElectionListener() throws Exception {
 		String path = SaturnExecutorsNode.LEADERNODE_PATH;
 		int depth = 1;
 		createNodePathIfNotExists(path);
 		shardingTreeCacheService.addTreeCacheIfAbsent(path, depth);
-		shardingTreeCacheService.addTreeCacheListenerIfAbsent(path, depth, new LeadershipElectionListener(namespaceShardingService));
+		shardingTreeCacheService.addTreeCacheListenerIfAbsent(path, depth,
+				new LeadershipElectionListener(namespaceShardingService));
 	}
 
-	private void createNodePathIfNotExists(String path) {
-		try {
-			if (curatorFramework.checkExists().forPath(path) == null) {
+	private void createNodePathIfNotExists(String path) throws Exception {
+		if (curatorFramework.checkExists().forPath(path) == null) {
+			try {
 				curatorFramework.create().creatingParentsIfNeeded().forPath(path);
+			} catch (KeeperException.NodeExistsException e) {// NOSONAR
+				log.info("node {} already existed, so skip creation", path);
 			}
-		} catch (Exception e) { //NOSONAR
 		}
 	}
 
@@ -165,17 +167,61 @@ public class NamespaceShardingManager {
 	 * close listeners, delete leadership
 	 */
 	public void stop() {
-		synchronized (isStopped) {
-			if (isStopped.compareAndSet(false, true)) {
-				stop0();
-				curatorFramework.getConnectionStateListenable().removeListener(shardingConnectionLostListener);
-				shardingConnectionLostListener.shutdown();
+		try {
+			if (namespaceShardingConnectionListener != null) {
+				curatorFramework.getConnectionStateListenable().removeListener(namespaceShardingConnectionListener);
+				namespaceShardingConnectionListener.shutdownNowUntilTerminated();
 			}
+		} catch (Exception e) {
+			log.error(e.getMessage(), e);
+		}
+		try {
+			shardingTreeCacheService.shutdown();
+		} catch (Exception e) {
+			log.error(e.getMessage(), e);
+		}
+		try {
+			namespaceShardingService.shutdown();
+		} catch (Exception e) {
+			log.error(e.getMessage(), e);
 		}
 	}
 
-	public NamespaceShardingService getNamespaceShardingService() {
-		return namespaceShardingService;
+	public void stopWithCurator() {
+		stop();
+		curatorFramework.close();
+	}
+
+	class NamespaceShardingConnectionListener extends AbstractConnectionListener {
+
+		public NamespaceShardingConnectionListener(String threadName) {
+			super(threadName);
+		}
+
+		@Override
+		public void stop() {
+			try {
+				shardingTreeCacheService.shutdown();
+				namespaceShardingService.shutdown();
+			} catch (InterruptedException e) {
+				log.info("stop interrupted");
+				Thread.currentThread().interrupt();
+			} catch (Exception e) {
+				log.error("stop error", e);
+			}
+		}
+
+		@Override
+		public void restart() {
+			try {
+				start0();
+			} catch (InterruptedException e) {
+				log.info("restart interrupted");
+				Thread.currentThread().interrupt();
+			} catch (Exception e) {
+				log.error("restart error", e);
+			}
+		}
 	}
 
 }

@@ -1,3 +1,20 @@
+/**
+ * Copyright 1999-2015 dangdang.com.
+ * <p>
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ * </p>
+ */
+
 package com.vip.saturn.job.utils;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -48,13 +65,13 @@ public class ScriptPidUtilsTest {
 	@Test
 	public void assertWritePidToFile() {
 		ScriptPidUtils.writePidToFile(executorName, jobName, 3, 103);
-		long pid = ScriptPidUtils.getFirstPidFromFile(executorName, jobName, ""+3);
+		long pid = ScriptPidUtils.getFirstPidFromFile(executorName, jobName, "" + 3);
 		assertThat(pid).isEqualTo(103);
 	}
 
 	@Test
 	public void assertgetPidFromFile() {
-		long pid = ScriptPidUtils.getFirstPidFromFile(executorName, jobName, ""+1);
+		long pid = ScriptPidUtils.getFirstPidFromFile(executorName, jobName, "" + 1);
 		assertThat(pid).isEqualTo(101);
 	}
 
@@ -68,19 +85,20 @@ public class ScriptPidUtilsTest {
 
 	@Test
 	public void assertremovePidFile() {
-		long pid = ScriptPidUtils.getFirstPidFromFile(executorName, jobName, ""+1);
+		long pid = ScriptPidUtils.getFirstPidFromFile(executorName, jobName, "" + 1);
 		assertThat(pid).isEqualTo(101);
 		ScriptPidUtils.removeAllPidFile(executorName, jobName, 1);
-		long pid2 = ScriptPidUtils.getFirstPidFromFile(executorName, jobName, ""+1);
+		long pid2 = ScriptPidUtils.getFirstPidFromFile(executorName, jobName, "" + 1);
 		assertThat(pid2).isEqualTo(-1);
 	}
-	
+
 	@Test
 	public void testFilterEnvInCmdStr() {
-		Map<String, String> env=  new HashMap<>();
+		Map<String, String> env = new HashMap<>();
 		env.put("fool", "duff");
 		env.put("ass", "david");
-		env.put("LS_COLORS", "r=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.jpg=01;35:*.jpeg=01;35:*.gif=01;35:*.bmp=01");
+		env.put("LS_COLORS",
+				"r=01;31:*.ace=01;31:*.zoo=01;31:*.cpio=01;31:*.7z=01;31:*.rz=01;31:*.jpg=01;35:*.jpeg=01;35:*.gif=01;35:*.bmp=01");
 		String cmd = "In front of me is ${fool}, beside me is $ass. $fool likes ${ass}. this is ${nobody} i don't know.";
 		String expected = "In front of me is duff, beside me is david. duff likes david. this is ${nobody} i don't know.";
 		String result = ScriptPidUtils.filterEnvInCmdStr(env, cmd);

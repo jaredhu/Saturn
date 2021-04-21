@@ -1,3 +1,17 @@
+/**
+ * Copyright 2016 vip.com.
+ * <p>
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+ *  the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+ * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+ * specific language governing permissions and limitations under the License.
+ * </p>
+ **/
+
 package com.vip.saturn.job.sharding.listener;
 
 import com.vip.saturn.job.sharding.node.SaturnExecutorsNode;
@@ -14,10 +28,10 @@ import org.slf4j.LoggerFactory;
  *
  */
 public class AddOrRemoveJobListener extends AbstractTreeCacheListener {
-	static Logger log = LoggerFactory.getLogger(AddOrRemoveJobListener.class);
+	private static final Logger LOGGER = LoggerFactory.getLogger(AddOrRemoveJobListener.class);
 
 	private AddJobListenersService addJobListenersService;
-	
+
 	public AddOrRemoveJobListener(AddJobListenersService addJobListenersService) {
 		this.addJobListenersService = addJobListenersService;
 	}
@@ -26,26 +40,25 @@ public class AddOrRemoveJobListener extends AbstractTreeCacheListener {
 	public void childEvent(Type type, String path, String nodeData) throws Exception {
 		try {
 			String job = StringUtils.substringAfterLast(path, "/");
-			if (!SaturnExecutorsNode.$JOBS.equals(job)) {
+			if (!SaturnExecutorsNode.JOBS_NODE.equals(job)) {
 				if (isAddJob(type)) {
-					log.info("job: {} created", job);
+					LOGGER.info("job: {} created", job);
 					addJobListenersService.addJobPathListener(job);
 				} else if (isRemoveJob(type)) {
-					log.info("job: {} removed", job);
+					LOGGER.info("job: {} removed", job);
 					addJobListenersService.removeJobPathTreeCache(job);
 				}
 			}
 		} catch (Exception e) {
-			log.error(e.getMessage(), e);
-			throw e;
+			LOGGER.error(e.getMessage(), e);
 		}
 	}
 
 	private boolean isAddJob(TreeCacheEvent.Type type) {
-		return type == TreeCacheEvent.Type.NODE_ADDED ;
+		return type == TreeCacheEvent.Type.NODE_ADDED;
 	}
 
 	private boolean isRemoveJob(TreeCacheEvent.Type type) {
-		return type == TreeCacheEvent.Type.NODE_REMOVED ;
+		return type == TreeCacheEvent.Type.NODE_REMOVED;
 	}
 }

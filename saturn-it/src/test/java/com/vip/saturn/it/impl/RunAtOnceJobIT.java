@@ -1,35 +1,47 @@
 /**
- * vips Inc.
- * Copyright (c) 2016 All Rights Reserved.
- */   
+ * Copyright 2016 vip.com.
+ * <p>
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+ *  the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+ * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+ * specific language governing permissions and limitations under the License.
+ * </p>
+ **/
+
 package com.vip.saturn.it.impl;
 
-import com.vip.saturn.it.AbstractSaturnIT;
-import com.vip.saturn.it.JobType;
+import com.vip.saturn.it.base.AbstractSaturnIT;
+import com.vip.saturn.it.base.FinishCheck;
 import com.vip.saturn.it.job.LongtimeJavaJob;
 import com.vip.saturn.it.job.SimpleJavaJob;
-import com.vip.saturn.job.internal.config.JobConfiguration;
+import com.vip.saturn.job.console.domain.JobConfig;
+import com.vip.saturn.job.console.domain.JobType;
 import com.vip.saturn.job.internal.server.ServerNode;
 import com.vip.saturn.job.internal.storage.JobNodePath;
 import org.junit.*;
 import org.junit.runners.MethodSorters;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.fail;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class RunAtOnceJobIT extends AbstractSaturnIT {
 
 	@BeforeClass
-    public static void setUp() throws Exception {
-        startNamespaceShardingManagerList(1);
-        startExecutorList(3);
-    }
+	public static void setUp() throws Exception {
+		startSaturnConsoleList(1);
+		startExecutorList(3);
+	}
 
-    @AfterClass
-    public static void tearDown() throws Exception {
-        stopExecutorList();
-        stopNamespaceShardingManagerList();
-    }
+	@AfterClass
+	public static void tearDown() throws Exception {
+		stopExecutorListGracefully();
+		stopSaturnConsoleList();
+	}
 
 	@Before
 	public void before() {
@@ -42,93 +54,100 @@ public class RunAtOnceJobIT extends AbstractSaturnIT {
 		LongtimeJavaJob.statusMap.clear();
 		SimpleJavaJob.statusMap.clear();
 	}
-    
-    /**
-     * 作业STOPPING时立即强制终止
-     * @throws InterruptedException
-     */
-    @Test
-    public void test_A_normalTrigger() throws InterruptedException{
-    	final int shardCount = 3;
-    	final String jobName = "runAtOnceITJob";
-    	for(int i=0;i<shardCount;i++){
-    		String key = jobName+"_"+i;
-        	SimpleJavaJob.statusMap.put(key, 0);
-    	}
-    	
-    	JobConfiguration jobConfiguration = new JobConfiguration(jobName);
-    	jobConfiguration.setCron("* * 1 * * ?");
-    	jobConfiguration.setJobType(JobType.JAVA_JOB.toString());
-    	jobConfiguration.setJobClass(SimpleJavaJob.class.getCanonicalName());
-    	jobConfiguration.setShardingTotalCount(shardCount);
-    	jobConfiguration.setTimeoutSeconds(0);
-    	jobConfiguration.setShardingItemParameters("0=0,1=1,2=2");
-    	addJob(jobConfiguration);
-    	Thread.sleep(1000);
-    	enableJob(jobConfiguration.getJobName());    	
-    	Thread.sleep(1000);
-    	runAtOnce(jobName);
-    	try {
-			waitForFinish(new FinishCheck(){
+
+	/**
+	 * 作业STOPPING时立即强制终止
+	 */
+	@Test
+	public void test_C_normalTrigger() throws Exception {
+		final int shardCount = 3;
+		final String jobName = "test_C_normalTrigger";
+		for (int i = 0; i < shardCount; i++) {
+			String key = jobName + "_" + i;
+			SimpleJavaJob.statusMap.put(key, 0);
+		}
+
+		JobConfig jobConfig = new JobConfig();
+		jobConfig.setJobName(jobName);
+		jobConfig.setCron("9 9 9 9 9 ? 2099");
+		jobConfig.setJobType(JobType.JAVA_JOB.toString());
+		jobConfig.setJobClass(SimpleJavaJob.class.getCanonicalName());
+		jobConfig.setShardingTotalCount(shardCount);
+		jobConfig.setTimeoutSeconds(0);
+		jobConfig.setShardingItemParameters("0=0,1=1,2=2");
+		addJob(jobConfig);
+		Thread.sleep(1000);
+		enableJob(jobName);
+		Thread.sleep(1000);
+		runAtOnce(jobName);
+		try {
+			waitForFinish(new FinishCheck() {
 
 				@Override
-				public boolean docheck() {
-					for(int i=0;i<shardCount;i++){
-			    		String key = jobName+"_"+i;
-			    		if(SimpleJavaJob.statusMap.get(key) != 1){
-			    			return false;
-			    		}
-			    	}
+				public boolean isOk() {
+					for (int i = 0; i < shardCount; i++) {
+						String key = jobName + "_" + i;
+						if (SimpleJavaJob.statusMap.get(key) != 1) {
+							return false;
+						}
+					}
 					return true;
 				}
-				
-			},30);
+
+			}, 30);
 		} catch (Exception e) {
 			e.printStackTrace();
 			fail(e.getMessage());
 		}
-    	
-    	removeJob(jobConfiguration.getJobName());	
-    	SimpleJavaJob.statusMap.clear();
-    }
-    
-    @Test
-    public void test_B_ignoreWhenIsRunning() throws InterruptedException {
-    	final int shardCount = 1;
-    	final String jobName = "runAtOnceITJob2";
-    	LongtimeJavaJob.JobStatus status = new LongtimeJavaJob.JobStatus();
+
+		disableJob(jobName);
+		Thread.sleep(1000);
+		removeJob(jobName);
+		SimpleJavaJob.statusMap.clear();
+	}
+
+	@Test
+	public void test_B_ignoreWhenIsRunning() throws Exception {
+		final int shardCount = 1;
+		final String jobName = "test_B_ignoreWhenIsRunning";
+		LongtimeJavaJob.JobStatus status = new LongtimeJavaJob.JobStatus();
 		status.runningCount = 0;
 		status.sleepSeconds = 3;
 		status.finished = false;
 		status.timeout = false;
-		status.killed = false;
 		LongtimeJavaJob.statusMap.put(jobName + "_" + 0, status);
-		JobConfiguration jobConfiguration = new JobConfiguration(jobName);
-    	jobConfiguration.setCron("0 0 1 * * ?");
-    	jobConfiguration.setJobType(JobType.JAVA_JOB.toString());
-    	jobConfiguration.setJobClass(LongtimeJavaJob.class.getCanonicalName());
-    	jobConfiguration.setShardingTotalCount(shardCount);
-    	jobConfiguration.setTimeoutSeconds(0);
-    	jobConfiguration.setShardingItemParameters("0=0");
-    	addJob(jobConfiguration);
-    	Thread.sleep(1000);
-    	enableJob(jobConfiguration.getJobName());    	
-    	Thread.sleep(1000);
-    	runAtOnce(jobName);
-    	Thread.sleep(1000);
-    	// suppose to be ignored.
-    	runAtOnce(jobName);
+		JobConfig jobConfig = new JobConfig();
+		jobConfig.setJobName(jobName);
+		jobConfig.setCron("9 9 9 9 9 ? 2099");
+		jobConfig.setJobType(JobType.JAVA_JOB.toString());
+		jobConfig.setJobClass(LongtimeJavaJob.class.getCanonicalName());
+		jobConfig.setShardingTotalCount(shardCount);
+		jobConfig.setTimeoutSeconds(0);
+		jobConfig.setShardingItemParameters("0=0");
+		addJob(jobConfig);
+		Thread.sleep(1000);
+		enableJob(jobName);
+		Thread.sleep(1000);
+		runAtOnce(jobName);
+		Thread.sleep(1000);
+		// suppose to be ignored.
+		try {
+			runAtOnce(jobName);
+		} catch (Exception e) {
+			assertThat(e.getMessage()).isEqualTo("该作业(" + jobName + ")不处于READY状态，不能立即执行");
+		}
 
 		try {
 			waitForFinish(new FinishCheck() {
 				@Override
-				public boolean docheck() {
+				public boolean isOk() {
 
-					String path = JobNodePath.getNodeFullPath(jobName, String.format(ServerNode.RUNONETIME, "executorName0"));
-					if(regCenter.isExisted(path)){
+					String path = JobNodePath
+							.getNodeFullPath(jobName, String.format(ServerNode.RUNONETIME, "executorName0"));
+					if (regCenter.isExisted(path)) {
 						return false;
 					}
-					
+
 					return true;
 				}
 
@@ -137,27 +156,28 @@ public class RunAtOnceJobIT extends AbstractSaturnIT {
 			e.printStackTrace();
 			fail(e.getMessage());
 		}
-		
-    	try {
-			waitForFinish(new FinishCheck(){
-				@Override
-				public boolean docheck() {
 
-					if(LongtimeJavaJob.statusMap.get(jobName + "_" + 0).runningCount < 1){
+		try {
+			waitForFinish(new FinishCheck() {
+				@Override
+				public boolean isOk() {
+
+					if (LongtimeJavaJob.statusMap.get(jobName + "_" + 0).runningCount < 1) {
 						return false;
 					}
 					return true;
 				}
-				
-			},30);
+
+			}, 30);
 		} catch (Exception e) {
 			e.printStackTrace();
 			fail(e.getMessage());
 		}
 
-    	removeJob(jobConfiguration.getJobName());	
-    	LongtimeJavaJob.statusMap.clear();
-    	
-    }
+		disableJob(jobName);
+		Thread.sleep(1000);
+		removeJob(jobName);
+		LongtimeJavaJob.statusMap.clear();
+
+	}
 }
-  

@@ -1,62 +1,74 @@
 /**
- * Copyright 2016 vip.com.
+ * Copyright 1999-2015 dangdang.com.
  * <p>
- * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
- * the License. You may obtain a copy of the License at
- * 
- * http://www.apache.org/licenses/LICENSE-2.0
- * 
- * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
- * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
- * specific language governing permissions and limitations under the License.
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  * </p>
  */
 
 package com.vip.saturn.job.internal.failover;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import com.vip.saturn.job.basic.AbstractSaturnService;
 import com.vip.saturn.job.basic.JobScheduler;
 import com.vip.saturn.job.internal.config.ConfigurationNode;
 import com.vip.saturn.job.internal.execution.ExecutionNode;
-import com.vip.saturn.job.internal.server.ServerService;
+import com.vip.saturn.job.internal.storage.JobNodePath;
 import com.vip.saturn.job.internal.storage.LeaderExecutionCallback;
+import com.vip.saturn.job.sharding.node.SaturnExecutorsNode;
+import com.vip.saturn.job.utils.LogUtils;
+import org.apache.zookeeper.CreateMode;
+import org.apache.zookeeper.KeeperException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 作业失效转移服务.
- * @author dylan.xue
  */
 public class FailoverService extends AbstractSaturnService {
-	static Logger log = LoggerFactory.getLogger(FailoverService.class);
 
-	private ServerService serverService;
+	private static Logger log = LoggerFactory.getLogger(FailoverService.class);
 
 	public FailoverService(final JobScheduler jobScheduler) {
 		super(jobScheduler);
 	}
-	
+
 	@Override
-	public void start(){
-		serverService = jobScheduler.getServerService();
+	public void start() {
 	}
+
 	/**
 	 * 设置失效的分片项标记.
-	 * 
+	 *
 	 * @param item 崩溃的作业项
 	 */
-	public boolean setCrashedFailoverFlag(final int item, final String random) {
+	public void createCrashedFailoverFlag(final int item) {
 		if (!isFailoverAssigned(item)) {
-			log.info(" {} - {} setCrashedFailoverFlag items:{} - value:{}",jobScheduler.getExecutorName(),jobScheduler.getJobName(),item, random);
-			getJobNodeStorage().fillJobNodeIfNullOrOverwrite(FailoverNode.getItemsNode(item),random);
-			return true;
+			try {
+				getJobNodeStorage().getClient().create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
+						.forPath(JobNodePath.getNodeFullPath(jobName, FailoverNode.getItemsNode(item)));
+				LogUtils.info(log, jobName, "{} - {} create failover flag of item {}", executorName, jobName, item);
+			} catch (KeeperException.NodeExistsException e) { // NOSONAR
+				LogUtils.debug(log, jobName,
+						"{} - {} create failover flag of item {} failed, because it is already existing", executorName,
+						jobName, item);
+			} catch (Exception e) {
+				LogUtils.error(log, jobName, e.getMessage(), e);
+			}
 		}
-		return false;
 	}
 
 	public boolean isFailoverAssigned(final Integer item) {
@@ -70,19 +82,21 @@ public class FailoverService extends AbstractSaturnService {
 		if (!needFailover()) {
 			return;
 		}
-		getJobNodeStorage().executeInLeader(FailoverNode.LATCH, new FailoverLeaderExecutionCallback());
+		getJobNodeStorage()
+				.executeInLeader(FailoverNode.LATCH, new FailoverLeaderExecutionCallback(), 1, TimeUnit.MINUTES,
+						new FailoverTimeoutLeaderExecutionCallback());
 	}
 
 	private boolean needFailover() {
-		return getJobNodeStorage().isJobNodeExisted(FailoverNode.ITEMS_ROOT)
-				&& !getJobNodeStorage().getJobNodeChildrenKeys(FailoverNode.ITEMS_ROOT).isEmpty()
-				&& getJobNodeStorage().isJobNodeExisted(ConfigurationNode.ENABLED)
-				&& Boolean.valueOf(getJobNodeStorage().getJobNodeData(ConfigurationNode.ENABLED));
+		return getJobNodeStorage().isJobNodeExisted(FailoverNode.ITEMS_ROOT) && !getJobNodeStorage()
+				.getJobNodeChildrenKeys(FailoverNode.ITEMS_ROOT).isEmpty() && getJobNodeStorage()
+				.isJobNodeExisted(ConfigurationNode.ENABLED) && Boolean
+				.parseBoolean(getJobNodeStorage().getJobNodeData(ConfigurationNode.ENABLED));
 	}
 
 	/**
 	 * 更新执行完毕失效转移的分片项状态.
-	 * 
+	 *
 	 * @param item 执行完毕失效转移的分片项列表
 	 */
 	public void updateFailoverComplete(final Integer item) {
@@ -91,7 +105,7 @@ public class FailoverService extends AbstractSaturnService {
 
 	/**
 	 * 获取运行在本作业服务器的失效转移序列号.
-	 * 
+	 *
 	 * @return 运行在本作业服务器的失效转移序列号
 	 */
 	public List<Integer> getLocalHostFailoverItems() {
@@ -100,8 +114,8 @@ public class FailoverService extends AbstractSaturnService {
 		for (String each : items) {
 			int item = Integer.parseInt(each);
 			String node = FailoverNode.getExecutionFailoverNode(item);
-			if (getJobNodeStorage().isJobNodeExisted(node)
-					&& executorName.equals(getJobNodeStorage().getJobNodeDataDirectly(node))) {
+			if (getJobNodeStorage().isJobNodeExisted(node) && executorName
+					.equals(getJobNodeStorage().getJobNodeDataDirectly(node))) {
 				result.add(item);
 			}
 		}
@@ -111,7 +125,7 @@ public class FailoverService extends AbstractSaturnService {
 
 	/**
 	 * 获取运行在本作业服务器的被失效转移的序列号.
-	 * 
+	 *
 	 * @return 运行在本作业服务器的被失效转移的序列号
 	 */
 	public List<Integer> getLocalHostTakeOffItems() {
@@ -129,6 +143,7 @@ public class FailoverService extends AbstractSaturnService {
 	 * 删除作业失效转移信息.
 	 */
 	public void removeFailoverInfo() {
+		getJobNodeStorage().removeJobNodeIfExisted(FailoverNode.ITEMS_ROOT);
 		for (String each : getJobNodeStorage().getJobNodeChildrenKeys(ExecutionNode.ROOT)) {
 			getJobNodeStorage().removeJobNodeIfExisted(FailoverNode.getExecutionFailoverNode(Integer.parseInt(each)));
 		}
@@ -141,17 +156,34 @@ public class FailoverService extends AbstractSaturnService {
 			if (!needFailover()) {
 				return;
 			}
-			if(jobScheduler == null){
+			if (jobScheduler == null) {
 				return;
 			}
-			if(!jobScheduler.getConfigService().getPreferList().contains(executorName) && !jobScheduler.getConfigService().isUseDispreferList()){
+			if (coordinatorRegistryCenter.isExisted(SaturnExecutorsNode.getExecutorNoTrafficNodePath(executorName))) {
 				return;
 			}
-			int crashedItem = Integer.parseInt(getJobNodeStorage().getJobNodeChildrenKeys(FailoverNode.ITEMS_ROOT).get(0));
-			log.info("[{}] msg=Elastic job: failover job begin, crashed item:{}.", jobName, crashedItem);
-			getJobNodeStorage().fillEphemeralJobNode(FailoverNode.getExecutionFailoverNode(crashedItem), executorName);
-			getJobNodeStorage().removeJobNodeIfExisted(FailoverNode.getItemsNode(crashedItem));
-			jobScheduler.triggerJob();
+			if (!jobScheduler.getConfigService().getPreferList().contains(executorName) && !jobScheduler
+					.getConfigService().isUseDispreferList()) {
+				return;
+			}
+			List<String> items = getJobNodeStorage().getJobNodeChildrenKeys(FailoverNode.ITEMS_ROOT);
+			if (items != null && !items.isEmpty()) {
+				int crashedItem = Integer
+						.parseInt(getJobNodeStorage().getJobNodeChildrenKeys(FailoverNode.ITEMS_ROOT).get(0));
+				LogUtils.debug(log, jobName, "Elastic job: failover job begin, crashed item:{}.", crashedItem);
+				getJobNodeStorage()
+						.fillEphemeralJobNode(FailoverNode.getExecutionFailoverNode(crashedItem), executorName);
+				getJobNodeStorage().removeJobNodeIfExisted(FailoverNode.getItemsNode(crashedItem));
+				jobScheduler.triggerJob(null);
+			}
+		}
+	}
+
+	class FailoverTimeoutLeaderExecutionCallback implements LeaderExecutionCallback {
+
+		@Override
+		public void execute() {
+			LogUtils.warn(log, jobName, "Failover leader election timeout with a minute");
 		}
 	}
 }

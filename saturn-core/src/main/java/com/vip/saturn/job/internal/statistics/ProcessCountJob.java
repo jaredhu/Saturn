@@ -1,12 +1,12 @@
 /**
- * Copyright 2016 vip.com.
+ * Copyright 1999-2015 dangdang.com.
  * <p>
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
- * 
+ *
  *      http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -28,25 +28,27 @@ import com.vip.saturn.job.internal.server.ServerService;
  * 
  */
 public class ProcessCountJob implements Runnable {
-    
-    private final JobConfiguration jobConfiguration;
-    
-    private final ServerService serverService;
-    
-    private final AnalyseService analyseService;
-    
-    public ProcessCountJob(final JobScheduler jobScheduler) {
-    	 jobConfiguration = jobScheduler.getCurrentConf();
-         serverService = jobScheduler.getServerService();
-         analyseService = jobScheduler.getAnalyseService();
-    }
-    
-    @Override
-    public void run() {
-        String jobName = jobConfiguration.getJobName();
-        serverService.persistProcessSuccessCount(ProcessCountStatistics.getProcessSuccessCount(serverService.getExecutorName(), jobName));
-        serverService.persistProcessFailureCount(ProcessCountStatistics.getProcessFailureCount(serverService.getExecutorName(), jobName));
-        analyseService.persistTotalCount();
-        analyseService.persistErrorCount();
-    }
+
+	private final JobConfiguration jobConfiguration;
+
+	private final ServerService serverService;
+
+	private final AnalyseService analyseService;
+
+	public ProcessCountJob(final JobScheduler jobScheduler) {
+		jobConfiguration = jobScheduler.getCurrentConf();
+		serverService = jobScheduler.getServerService();
+		analyseService = jobScheduler.getAnalyseService();
+	}
+
+	@Override
+	public void run() {
+		String jobName = jobConfiguration.getJobName();
+		serverService.persistProcessSuccessCount(
+				ProcessCountStatistics.getProcessSuccessCount(serverService.getExecutorName(), jobName));
+		serverService.persistProcessFailureCount(
+				ProcessCountStatistics.getProcessFailureCount(serverService.getExecutorName(), jobName));
+		analyseService.persistTotalCount();
+		analyseService.persistErrorCount();
+	}
 }

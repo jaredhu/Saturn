@@ -1,26 +1,48 @@
+/**
+ * Copyright 2016 vip.com.
+ * <p>
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+ *  the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+ * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+ * specific language governing permissions and limitations under the License.
+ * </p>
+ **/
+
 package com.vip.saturn.job.shell;
 
-import java.lang.reflect.Field;
-
+import com.vip.saturn.job.utils.LogEvents;
+import com.vip.saturn.job.utils.LogUtils;
+import com.vip.saturn.job.utils.ScriptPidUtils;
 import org.apache.commons.exec.ExecuteWatchdog;
 import org.apache.commons.exec.OS;
 import org.apache.commons.exec.Watchdog;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.vip.saturn.job.basic.SaturnConstant;
-import com.vip.saturn.job.utils.ScriptPidUtils;
+import java.lang.reflect.Field;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Saturn的ExecuteWatchdog
- * 
- * @author linzhaoming
+ * Watchdog for shell job process, provide this function that kill process when timeout or forceStop.
  *
+ * @author linzhaoming
+ * @author hebelala
  */
 public class SaturnExecuteWatchdog extends ExecuteWatchdog {
-	static Logger log = LoggerFactory.getLogger(SaturnExecuteWatchdog.class);
 
-	private Process monitoringProcess;
+	private static final Logger log = LoggerFactory.getLogger(SaturnExecuteWatchdog.class);
+
+	private static final int INIT = 0;
+
+	private static final int TIMEOUT = 1;
+
+	private static final int FORCE_STOP = 2;
+
+	private static final int INVALID_PID = -1;
 
 	private String jobName;
 
@@ -28,117 +50,114 @@ public class SaturnExecuteWatchdog extends ExecuteWatchdog {
 
 	private String execParam;
 
-	private boolean hasKilledProcess;
+	private String executorName;
 
 	private long pid = -1;
 
-	private String executorName;
+	private AtomicInteger status = new AtomicInteger(INIT);
 
-	/**
-	 * Creates a new watchdog with a given timeout.
-	 * 
-	 * @param timeout the timeout for the process in milliseconds. It must be greater than 0 or 'INFINITE_TIMEOUT'
-	 * @param jobName Job Name
-	 * @param jobItem Job Item
-	 * @param execParam Exec Param
-	 */
-	public SaturnExecuteWatchdog(final long timeout, final String jobName, final int jobItem, final String execParam) {
+	private Process monitoringProcess;
+
+	private boolean hasKilledProcess;
+
+	public SaturnExecuteWatchdog(final long timeout, final String jobName, final int jobItem, final String execParam,
+			final String executorName) {
 		super(timeout);
 		this.jobName = jobName;
 		this.jobItem = jobItem;
 		this.execParam = execParam;
+		this.executorName = executorName;
 	}
-
-	public Process getMonitoringProcess() {
-		return monitoringProcess;
-	}
-
 
 	public String getJobName() {
 		return jobName;
 	}
 
-	public synchronized int getJobItem() {
+	public int getJobItem() {
 		return jobItem;
 	}
 
-	public synchronized void setJobItem(int jobItem) {
-		this.jobItem = jobItem;
-	}
-
-	public synchronized String getExecParam() {
+	public String getExecParam() {
 		return execParam;
 	}
 
-	public synchronized void setExecParam(String execParam) {
-		this.execParam = execParam;
+	public long getPid() {
+		return pid;
 	}
 
-	public synchronized void setExecutorName(String executorName) {
-		this.executorName = executorName;
+	public String getExecutorName() {
+		return executorName;
 	}
 
-	/**
-	 * Watches the given process and terminates it, if it runs for too long. All information from the previous run are
-	 * reset.
-	 * 
-	 * @param processToMonitor the process to monitor. It cannot be {@code null}
-	 * @throws IllegalStateException if a process is still being monitored.
-	 */
+	public boolean isTimeout() {
+		return status.get() == TIMEOUT;
+	}
+
+	public boolean isForceStop() {
+		return status.get() == FORCE_STOP;
+	}
+
+	@Override
 	public synchronized void start(final Process processToMonitor) {
 		super.start(processToMonitor);
 		this.monitoringProcess = processToMonitor;
 
-		// 保存Pid文件文件
+		// get and save pid to file
 		pid = getPidByProcess(monitoringProcess);
-		if (pid > 0) {
+		if (hasValidPid()) {
 			ScriptPidUtils.writePidToFile(executorName, jobName, jobItem, pid);
 		}
 	}
 
 	/**
-	 * Called after watchdog has finished.
+	 * Set status to forceStop. Destroy the running process and stop watchdog. At last, use kill, not kill -9.
 	 */
+	@Override
+	public synchronized void destroyProcess() {
+		status.compareAndSet(INIT, FORCE_STOP);
+		super.destroyProcess();
+	}
+
+	@Override
 	public synchronized void timeoutOccured(final Watchdog w) {
+		status.compareAndSet(INIT, TIMEOUT);
 		try {
-			try {
-				if (monitoringProcess != null) {
-					monitoringProcess.exitValue();
-				}
-			} catch (final IllegalThreadStateException itse) {// NOSONAR
-				if (isWatching()) {
-					hasKilledProcess = true;
-					if (pid != -1) {
-						try {
-							ScriptPidUtils.killAllChildrenByPid(pid, false);
-						} catch (InterruptedException e) {
-							log.error(String.format(SaturnConstant.ERROR_LOG_FORMAT, jobName, e.getMessage()), e);
-						}
-					}
+			// We must check if the process was not stopped
+			// before being here
+			if (monitoringProcess != null) {
+				monitoringProcess.exitValue();
+			}
+		} catch (final IllegalThreadStateException itse) { // NOSONAR
+			LogUtils.debug(log, jobName, "the monitoring process is not stopped");
+			if (isWatching()) {
+				hasKilledProcess = true;
+				// not use process.destroy(), should kill children firstly, then kill the process
+				if (hasValidPid()) {
+					ScriptPidUtils.killAllChildrenByPid(pid, false);
 				}
 			}
 		} catch (final Exception e) {
-			log.error(String.format(SaturnConstant.ERROR_LOG_FORMAT, jobName, e.getMessage()), e);
+			LogUtils.error(log, jobName, e.getMessage(), e);
 		} finally {
 			cleanUp();
 		}
 	}
 
+	@Override
 	public synchronized boolean killedProcess() {
 		return hasKilledProcess;
 	}
 
-	public Long getProcessId() {
-		return pid;
+	@Override
+	protected synchronized void cleanUp() {
+		super.cleanUp();
+		monitoringProcess = null;
 	}
 
-	/**
-	 * @param p 执行Process
-	 * @return 执行的脚本进程ID
-	 */
 	public static long getPidByProcess(Process p) {
+		// linux, unix, macos should return true while calling OS.isFamilyUnix()
 		if (!OS.isFamilyUnix()) {
-			return -1;
+			return INVALID_PID;
 		}
 
 		try {
@@ -147,11 +166,15 @@ public class SaturnExecuteWatchdog extends ExecuteWatchdog {
 			Field field = cls.getDeclaredField("pid");
 			field.setAccessible(true);
 			Object pid = field.get(p);
-			log.debug("Get Process Id: {}", pid);
-			return Long.valueOf(pid.toString());
+			LogUtils.debug(log, LogEvents.ExecutorEvent.COMMON, "Get Process Id: {}", pid);
+			return Long.parseLong(pid.toString());
 		} catch (Exception e) {
-			log.error("msg=Getting pid error: {}", e.getMessage(), e);
-			return Long.valueOf(-1);
+			LogUtils.error(log, LogEvents.ExecutorEvent.COMMON, "Getting pid error: {}", e.getMessage(), e);
+			return INVALID_PID;
 		}
+	}
+
+	private boolean hasValidPid() {
+		return pid != INVALID_PID;
 	}
 }

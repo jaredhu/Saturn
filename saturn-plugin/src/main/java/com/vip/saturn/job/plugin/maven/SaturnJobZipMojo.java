@@ -1,3 +1,17 @@
+/**
+ * Copyright 2016 vip.com.
+ * <p>
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+ *  the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+ * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+ * specific language governing permissions and limitations under the License.
+ * </p>
+ **/
+
 package com.vip.saturn.job.plugin.maven;
 
 import java.io.File;
@@ -29,8 +43,8 @@ import com.vip.saturn.job.plugin.utils.CommonUtils;
 public class SaturnJobZipMojo extends AbstractMojo {
 
 	@Component
-    private MavenProjectHelper projectHelper;
-	
+	private MavenProjectHelper projectHelper;
+
 	@SuppressWarnings({ "unchecked" })
 	@Override
 	public void execute() throws MojoExecutionException, MojoFailureException {
@@ -42,16 +56,15 @@ public class SaturnJobZipMojo extends AbstractMojo {
 
 		MavenProject project = (MavenProject) getPluginContext().get("project");
 		String version = getSaturnVersion(project);
-		log.info("Packing the saturn job into a zip file: version:"+version);
+		log.info("Packing the saturn job into a zip file: version:" + version);
 
 		List<File> runtimeLibFiles = new ArrayList<File>();
 		List<Artifact> runtimeArtifacts = project.getRuntimeArtifacts();
 		for (Artifact artifact : runtimeArtifacts) {
 			runtimeLibFiles.add(artifact.getFile());
 		}
-		// Maybe could be more cool.
 		runtimeLibFiles.add(new File(project.getBuild().getDirectory(),
-				project.getArtifactId() + "-" + project.getVersion() + ".jar"));
+				project.getBuild().getFinalName() + "." + project.getPackaging()));
 
 		File zipFile = new File(project.getBuild().getDirectory(),
 				project.getArtifactId() + "-" + project.getVersion() + "-" + "app.zip");
@@ -61,12 +74,10 @@ public class SaturnJobZipMojo extends AbstractMojo {
 			e.printStackTrace();
 			throw new MojoExecutionException("zip " + zipFile + " failed", e);
 		}
-		
+
 		projectHelper.attachArtifact(project, "zip", "executor", zipFile);
 
 	}
-
-
 
 	@SuppressWarnings("unchecked")
 	private String getSaturnVersion(MavenProject project) throws MojoExecutionException {
@@ -79,7 +90,7 @@ public class SaturnJobZipMojo extends AbstractMojo {
 				}
 			}
 		}
-		throw new MojoExecutionException("cannot read the saturn-job-core dependency.");
+		throw new MojoExecutionException("cannot read the saturn-job-api dependency.");
 	}
 
 }

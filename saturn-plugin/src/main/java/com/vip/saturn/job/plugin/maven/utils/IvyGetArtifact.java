@@ -1,3 +1,17 @@
+/**
+ * Copyright 2016 vip.com.
+ * <p>
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+ *  the License. You may obtain a copy of the License at
+ *
+ * http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+ * an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+ * specific language governing permissions and limitations under the License.
+ * </p>
+ **/
+
 package com.vip.saturn.job.plugin.maven.utils;
 
 import java.io.File;
@@ -46,7 +60,8 @@ public class IvyGetArtifact {
 		this.ivy = ivy;
 	}
 
-	private File getIvyfile(String org, String name, String rev, String[] confs, Set<Map<String, Object>> artifacts) throws IOException {
+	private File getIvyfile(String org, String name, String rev, String[] confs, Set<Map<String, Object>> artifacts)
+			throws IOException {
 		File ivyfile;
 		ivyfile = File.createTempFile("ivy", ".xml");
 		ivyfile.deleteOnExit();
@@ -54,26 +69,27 @@ public class IvyGetArtifact {
 				.newDefaultInstance(ModuleRevisionId.newInstance(org, name + "-caller", "working"));
 		DefaultDependencyDescriptor dd = new DefaultDependencyDescriptor(md,
 				ModuleRevisionId.newInstance(org, name, rev), false, false, true);
-		
-		if(artifacts != null && !artifacts.isEmpty()) {
-			for(Map<String, Object> artifact : artifacts) {
+
+		if (artifacts != null && !artifacts.isEmpty()) {
+			for (Map<String, Object> artifact : artifacts) {
 				String artifactName = (String) artifact.get("name");
 				String artifactType = (String) artifact.get("type");
 				String artifactExt = (String) artifact.get("ext");
 				URL artifactUrl = (URL) artifact.get("url");
 				Map<?, ?> extraAttributes = (Map<?, ?>) artifact.get("extraAttributes");
-				DefaultDependencyArtifactDescriptor dad = new DefaultDependencyArtifactDescriptor(dd, artifactName, artifactType, artifactExt, artifactUrl, extraAttributes);
+				DefaultDependencyArtifactDescriptor dad = new DefaultDependencyArtifactDescriptor(dd, artifactName,
+						artifactType, artifactExt, artifactUrl, extraAttributes);
 				dd.addDependencyArtifact("default", dad);
 			}
 		}
-		
+
 		for (int i = 0; i < confs.length; i++) {
 			dd.addDependencyConfiguration("default", confs[i]);
 		}
 		md.addDependency(dd);
-		
+
 		md.addExtraAttributeNamespace("m", "http://ant.apache.org/ivy/maven");
-		
+
 		XmlModuleDescriptorWriter.write(md, ivyfile);
 		return ivyfile;
 	}
@@ -106,7 +122,8 @@ public class IvyGetArtifact {
 		return fs;
 	}
 
-	public List<URL> get(String org, String name, String rev, String[] confs, Set<Map<String, Object>> artifacts) throws IOException, ParseException {
+	public List<URL> get(String org, String name, String rev, String[] confs, Set<Map<String, Object>> artifacts)
+			throws IOException, ParseException {
 		Set<URL> artifactsGeted = new HashSet<URL>();
 		try {
 			ivy.getSettings().addAllVariables(System.getProperties());
@@ -135,5 +152,5 @@ public class IvyGetArtifact {
 		result.addAll(artifactsGeted);
 		return result;
 	}
-	
+
 }

@@ -1,58 +1,81 @@
-# ![logo](https://github.com/vipshop/Saturn/blob/doc/saturn-logo.jpg)
+# ![logo](https://vipshop.github.io/Saturn/zh-cn/3.x/_media/saturn-logo-new.png)
 
 [![Build Status](https://secure.travis-ci.org/vipshop/Saturn.png?branch=develop)](https://travis-ci.org/vipshop/Saturn)
+[![GitHub release](https://img.shields.io/github/release/vipshop/Saturn.svg)](https://github.com/vipshop/Saturn/releases)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](http://www.apache.org/licenses/LICENSE-2.0)
 
-## Special thanks
+Saturn is a platform created by VIP.com(唯品会) to provide a distributed, fault tolerant and high available job scheduling service.
 
-Saturn is originated from Dangdang's [elastic job](https://github.com/dangdangdotcom/elastic-job), we enhance it according to our requirement and understandings. Special thanks to Zhang Liang@dangdang who give us a lot of help and suggestions.
+## Why Saturn?
 
-The product roadmap refer to [RoadMap](https://github.com/vipshop/Saturn/wiki/Saturn-Roadmap-CN)
+- Time based and language unrestricted job
+- Easy job implmentation and web based management
+- Parallel subtask(shard) scheduling
+- 1-second-level scheduling supported
+- Intelligent load based job allocation
+- Fail detection & failover support
+- Statistical data visualization
+- All-around monitoring and easy troubleshooting
+- Multi-active cluster deployment support
+- Container friendly
+- Stand the test of billion times scheduling per day
+- and more
 
-WeChat Group: Please add group owner named `duffqiu` to join us!
+## Quick Start 快速安装
 
-## 1 Product Description
+Make sure below stuff already been installed：
 
-The VIP's distributed job schedule platform. It supports java and shell jobs with sharding, tolerance, high availability...
+- Java 7+
+- Maven 3.0.4+
+- node.js 8.7.0+
+- npm 5.4.2+
+- git (any version)
 
-### 1.1 Feature Map
+Then checkout the code and start:
 
-- see [Amazing Feature Destription](https://github.com/vipshop/Saturn/wiki/Saturn-Amazing-Feature-Description)
+```
+git clone https://github.com/vipshop/Saturn
+git checkout develop
+cd saturn-docker
+# for linux
+chmod +x quickstart.sh
+sh quickstart.sh
+# for MS Windows
+# quickstart.bat
+```
 
-### 1.2 User Guide
-- see [Quick Start Guide](https://github.com/vipshop/Saturn/wiki/Quick-Start)
-- see [Quick Start with Docker Container](https://github.com/vipshop/Saturn/wiki/Quick-Start---Docker)
-- see [User Guide CN](https://github.com/vipshop/Saturn/wiki/%E4%BD%BF%E7%94%A8%E6%8C%87%E5%BC%95(%E5%AE%8C%E6%95%B4))
+Or you can quick start [via docker compose](https://vipshop.github.io/Saturn/#/zh-cn/3.x/quickstart?id=_2-docker%E5%90%AF%E5%8A%A8)
 
+**To notice that the quick start just for demo purpose, for production environement, please follow this [instruction](https://vipshop.github.io/Saturn/#/zh-cn/3.x/saturn-console-deployment).**
 
-## 2 System Design
+## Releases 发布历史
 
-### 2.1 Entity Model
-see [Entity Model](https://github.com/vipshop/Saturn/wiki/Saturn-Entity-Model)
+[Release notes](https://github.com/vipshop/Saturn/releases)
 
-### 2.2 Artichecture
-see [Architecture Description CN](https://github.com/vipshop/Saturn/wiki/Saturn%E6%9E%B6%E6%9E%84%E6%96%87%E6%A1%A3)
+*[3.3.1](https://github.com/vipshop/Saturn/releases/tag/v3.3.1) is the latest stable release, or checkout the develop branch to try something new and cool.*
 
-## 3 Production Development Guide
-### 3.1  Development Guide for Java
-- see [Development Guide for Java CN](https://github.com/vipshop/Saturn/wiki/saturn%E5%BC%80%E5%8F%91%E6%8C%87%E5%BC%95%E4%B9%8Bjava)
-- see [Development Guide for Shell CN](https://github.com/vipshop/Saturn/wiki/saturn%E5%BC%80%E5%8F%91%E6%8C%87%E5%BC%95%E4%B9%8Bshell)
+## Documents & Tutorials 文档与教程
 
-## 4 Operation
-### 4.1 Gray Upgrade
-- see [Gray Upgrade Process](https://github.com/vipshop/Saturn/wiki/Saturn-Job-Gray-Upgrade-Process)
+Please go to https://vipshop.github.io/Saturn for reading the documents of 3.0.
 
-### 4.2 Production Deployment Guide
-- see [Console Deployment](https://github.com/vipshop/Saturn/wiki/saturn部署文档之console)
-- see [Executor Deployment](https://github.com/vipshop/Saturn/wiki/Saturn部署文档之executor)
+For the document of 2.x, please come [here](https://vipshop.github.io/Saturn/#/zh-cn/2.x/).
 
-## 5 The team
+## The team 开发团队
 
-[The Saturn Wow Team](https://github.com/vipshop/Saturn/wiki/Saturn's-Wow-Team)
+[About us](https://github.com/vipshop/Saturn/wiki/Saturn's-Wow-Team)
 
-## 6 Powered by Saturn
+## Cases 使用案例
+
+![orgs](https://vipshop.github.io/Saturn/zh-cn/3.x/_media/orgs.jpg)
 
 [Organizations using Saturn](https://github.com/vipshop/Saturn/wiki/Organizations-using-Saturn)
 
-## 7 Presentation
+使用Saturn的公司如果方便请在[这里](https://github.com/vipshop/Saturn/issues/506)留下公司+网址，方便我们宣传，感谢
 
-[All Meetup Materials](https://github.com/vipshop/Saturn/wiki/Presentation)
+## Getting help, and helping out 社区互助
+
+WeChat Group: Please add group owner `viptech128` (备注"saturn") to join us!
+
+## Special thanks 特别鸣谢
+
+Saturn is originated from Dangdang's [elastic job](https://github.com/dangdangdotcom/elastic-job), we enhance it according to our requirement and understandings. Special thanks to Zhang Liang@dangdang who give us a lot of help and suggestions.
